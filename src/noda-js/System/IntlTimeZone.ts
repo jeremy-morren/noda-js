@@ -1,11 +1,13 @@
-// noda-js: new code, modelled on NodaTime 3.3.7: src/NodaTime/TimeZones/BclDateTimeZone.cs
-// Copyright 2012 The Noda Time Authors. All rights reserved.
-// Use of this source code is governed by the Apache License 2.0,
-// as found in the LICENSE.txt file.
+// noda-js: new code. Time zones from the host's Intl implementation, for noda-js/system where it can't read the
+// operating system's own data (browsers, non-Windows hosts, Windows without FFI): the zone intervals are recovered by
+// probing Intl.DateTimeFormat for UTC offsets. Also Intl helpers for IDs (the host's zone, its supported zones,
+// canonical IDs) and the host's tz version.
 
-import { CachingZoneIntervalMap, DateTimeZone, Instant, Offset, Preconditions, ZoneInterval } from "../internal.ts";
+import { Instant, Offset, ZoneInterval } from "../internal.ts";
 import type { IZoneIntervalMap } from "../internal.ts";
-import { NewArgumentException, NewInvalidOperationException, type ArgumentException, type InvalidOperationException } from "../internal.ts";
+
+// Node's process object, where present (declared here as the build has no Node types).
+declare const process: { versions?: { tz?: unknown } } | undefined;
 
 // How the zone rules are recovered from Intl
 // ------------------------------------------
@@ -14,7 +16,7 @@ import { NewArgumentException, NewInvalidOperationException, type ArgumentExcept
 // differ, a binary search narrows the change down to the millisecond. The transitions of each year are computed
 // once and cached; zone intervals are then cached again by CachingZoneIntervalMap.
 //
-// Limitations (all documented on BrowserDateTimeZone):
+// Limitations (all documented on SystemDateTimeZone and in docs/Timezones.md):
 // - A pair of transitions closer together than ProbeStepDays that returns to the same offset is not seen.
 // - A change of abbreviation without a change of offset is not a transition.
 // - Before MinProbeYear, the offset is taken to be the offset at the start of MinProbeYear. (tzdb has no
@@ -110,7 +112,7 @@ class IntlZoneProbe {
   /** The host's English abbreviation for the zone at the given time (e.g. "AEST", or "GMT+5:30"). */
   NameAt(ms: number): string {
     this._nameFormat ??= new Intl.DateTimeFormat("en-US", { timeZone: this.Id, timeZoneName: "short", hour: "numeric" });
-    // eslint-disable-next-line es-x/no-intl-datetimeformat-prototype-formattoparts -- noda-js/browser needs formatToParts (ES2017 Intl; see README)
+    // eslint-disable-next-line es-x/no-intl-datetimeformat-prototype-formattoparts -- noda-js/system's Intl fallback needs formatToParts (ES2017 Intl; see README)
     const part = this._nameFormat.formatToParts(ms).find((p) => p.type === "timeZoneName");
     return part?.value ?? this.Id;
   }
@@ -157,7 +159,7 @@ class IntlZoneProbe {
     let minute = 0;
     let second = 0;
     let beforeCommonEra = false;
-    // eslint-disable-next-line es-x/no-intl-datetimeformat-prototype-formattoparts -- noda-js/browser needs formatToParts (ES2017 Intl; see README)
+    // eslint-disable-next-line es-x/no-intl-datetimeformat-prototype-formattoparts -- noda-js/system's Intl fallback needs formatToParts (ES2017 Intl; see README)
     for (const part of this._wallFormat.formatToParts(ms)) {
       switch (part.type) {
         case "era":
@@ -197,7 +199,7 @@ class IntlZoneProbe {
 }
 
 /**
- * The zone interval map of a {@link BrowserDateTimeZone}: zone intervals recovered from Intl by probing.
+ * The zone interval map of a time zone from Intl: zone intervals recovered by probing.
  */
 class IntlZoneIntervalMap implements IZoneIntervalMap {
   private readonly _years = new Map<number, YearData>();
@@ -341,90 +343,71 @@ class IntlZoneIntervalMap implements IZoneIntervalMap {
   }
 }
 
-let systemDefault: BrowserDateTimeZone | null = null;
+/**
+ * The zone interval map (uncached) of the host's Intl time zone with the given ID.
+ * @throws {RangeError} The host doesn't support the given time zone ID.
+ * @internal
+ */
+export function CreateIntlZoneIntervalMap(id: string): IZoneIntervalMap {
+  return new IntlZoneIntervalMap(new IntlZoneProbe(id));
+}
+
+/** Whether the host has Intl.DateTimeFormat (time zone support is checked when a zone is created). @internal */
+export function IsIntlAvailable(): boolean {
+  return typeof Intl !== "undefined" && typeof Intl.DateTimeFormat === "function";
+}
+
+/** Intl.supportedValuesOf("timeZone"), or [] where the host doesn't have it. @internal */
+export function GetIntlSupportedTimeZones(): readonly string[] {
+  // eslint-disable-next-line es-x/no-intl-supportedvaluesof -- feature-detected; without it the list is just the local zone
+  return typeof Intl !== "undefined" && typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
+}
+
+/** The host's default time zone ID (Intl.DateTimeFormat().resolvedOptions().timeZone), or null. @internal */
+export function GetIntlLocalId(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The ID as the host canonicalizes it (e.g. "Asia/Kolkata" → "Asia/Calcutta" on ICU-based hosts), or null if the host doesn't accept it. @internal */
+export function IntlCanonicalTimeZoneId(id: string): string | null {
+  if (!IsIntlAvailable()) {
+    return null;
+  }
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: id }).resolvedOptions().timeZone ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether the host's Intl accepts the time zone ID. @internal */
+export function IsIntlTimeZoneId(id: string): boolean {
+  return IntlCanonicalTimeZoneId(id) !== null;
+}
+
+/** The host's time zone data version, where it exposes one (Node's process.versions.tz), or "unknown". @internal */
+export function GetIntlTimeZoneVersion(): string {
+  // (Not globalThis, which is ES2020.)
+  const versions = typeof process !== "undefined" ? process?.versions : undefined;
+  return typeof versions?.tz === "string" ? versions.tz : "unknown";
+}
 
 /**
- * A time zone whose rules come from the host's own time zone data, through `Intl` (the counterpart of NodaTime's
- * `BclDateTimeZone`).
- *
- * `Intl` only reports the UTC offset (and an abbreviation) at a given instant, so the zone's transitions are
- * found by sampling the offset every week of each year and binary-searching to the millisecond wherever it
- * changes. The transitions of each year are computed when first needed, and cached.
- *
- * This is approximate in a few ways:
- * - Two transitions less than a week apart that return to the same offset are not detected.
- * - {@link ZoneInterval.Name} is the host's English abbreviation (`timeZoneName: "short"` in `en-US`, e.g. "AEST"
- *   or "GMT+5:30"), not tzdb's.
- * - `Intl` gives only the total offset. Within each UTC year, the smallest offset in force is taken to be the
- *   standard offset and anything up to 2 hours above it daylight saving, so {@link ZoneInterval.Savings} is a heuristic. (It is
- *   wrong for negative-DST zones such as Europe/Dublin, and for permanent changes of standard offset part way
- *   through a year.)
- * - Before 1800, the offset is taken to be the offset at the start of 1800 (tzdb has no earlier transitions).
- *   From 2040 onwards, the zone is assumed to follow a single annual rule, as ICU does.
- * - {@link DateTimeZone.MinOffset} and {@link DateTimeZone.MaxOffset} are estimated from the offsets at the
- *   start of each quarter between 1800 and 2040.
- * - The ID is passed through as given; hosts differ in which IDs they accept and how they canonicalize them.
- *
- * Two instances of this class are deemed equal if and only if they are the same object.
- *
- * This type is immutable reference type. See the thread safety section of the user guide for more information.
+ * The host's English generic name for a zone (Intl's "longGeneric", e.g. "Australian Eastern Time"), or null where the
+ * host doesn't have it.
+ * @internal
  */
-export class BrowserDateTimeZone extends DateTimeZone {
-  private readonly _map: IZoneIntervalMap;
-
-  private constructor(id: string, map: IZoneIntervalMap) {
-    super(id, false, map.MinOffset, map.MaxOffset);
-    this._map = map;
-  }
-
-  /** @inheritdoc */
-  override GetZoneInterval(instant: Instant): ZoneInterval {
-    return this._map.GetZoneInterval(instant);
-  }
-
-  /**
-   * Creates a new {@link BrowserDateTimeZone} for a time zone ID supported by the host's `Intl` implementation
-   * (the counterpart of `BclDateTimeZone.FromTimeZoneInfo`).
-   * @param id The time zone ID, such as "Europe/London".
-   * @returns A {@link BrowserDateTimeZone} for the given ID.
-   * @throws {ArgumentException} The host doesn't support the given time zone ID.
-   */
-  static FromId(id: string): BrowserDateTimeZone {
-    Preconditions.CheckNotNull(id, "id");
-    let probe: IntlZoneProbe;
-    try {
-      probe = new IntlZoneProbe(id);
-    } catch (e) {
-      if (e instanceof RangeError) {
-        throw NewArgumentException(`${id} is not a system time zone ID`, "id", { cause: e });
-      }
-      throw e;
-    }
-    return new BrowserDateTimeZone(id, CachingZoneIntervalMap.CacheMap(new IntlZoneIntervalMap(probe)));
-  }
-
-  /**
-   * Returns a time zone for the host's default time zone (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
-   *
-   * This method will retain a reference to the returned `BrowserDateTimeZone`, and will attempt to return it if
-   * called repeatedly (assuming that the default time zone has not changed) rather than creating a new instance,
-   * though this behaviour is not guaranteed.
-   * @throws {InvalidOperationException} The system does not provide a time zone.
-   * @returns A {@link BrowserDateTimeZone} for the host's default time zone.
-   */
-  static ForSystemDefault(): BrowserDateTimeZone {
-    const local: string | undefined = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (local === undefined) {
-      throw NewInvalidOperationException("No system default time zone is available");
-    }
-    let currentSystemDefault = systemDefault;
-
-    // Cached copy is out of date - wrap a new one.
-    if (currentSystemDefault?.Id !== local) {
-      currentSystemDefault = BrowserDateTimeZone.FromId(local);
-      systemDefault = currentSystemDefault;
-    }
-    // Always return our local variable; the field may have changed again.
-    return currentSystemDefault;
+export function GetIntlGenericName(id: string): string | null {
+  try {
+    const format = new Intl.DateTimeFormat("en-US", { timeZone: id, timeZoneName: "longGeneric" });
+    // eslint-disable-next-line es-x/no-intl-datetimeformat-prototype-formattoparts -- noda-js/system's Intl fallback needs formatToParts (ES2017 Intl)
+    const part = format.formatToParts(0).find((p) => p.type === "timeZoneName");
+    return part?.value ?? null;
+  } catch {
+    return null;
   }
 }

@@ -3,6 +3,7 @@ using NodaJs.Tools.Cldr;
 using NodaJs.Tools.Common;
 using NodaJs.Tools.Data;
 using NodaJs.Tools.Scenarios;
+using NodaJs.Tools.SystemZones;
 
 // Generates noda-js's *.generated.ts files from .NET and NodaTime. tools/generate.ps1 builds and runs this.
 //
@@ -65,7 +66,24 @@ all.SetAction((result, _) => Run(result, async output =>
     new Extractor(output).Run();
 }));
 
-var root = new RootCommand("Generates noda-js's *.generated.ts files from .NET and NodaTime.") { repoOption, data, cldr, scenarios, all };
+var outputOption = new Option<string>("--output")
+{
+    Description = "Where to write the JSON (default: test-results/system-zones.json in the repo).",
+};
+var systemZones = new Command("system-zones",
+    "NodaTime's BclDateTimeZoneSource on this machine (IDs, names, rules and zone intervals) as JSON, for test/system/.")
+{
+    outputOption,
+};
+systemZones.SetAction(result =>
+{
+    if (result.GetValue(repoOption) is { } repo)
+        ToolEnvironment.UseRepoRoot(repo);
+    SystemZonesExport.Run(result.GetValue(outputOption) ?? Path.Combine(ToolEnvironment.RepoRoot, "test-results", "system-zones.json"));
+    return 0;
+});
+
+var root = new RootCommand("Generates noda-js's *.generated.ts files from .NET and NodaTime.") { repoOption, data, cldr, scenarios, all, systemZones };
 return await root.Parse(args).InvokeAsync();
 
 // Shared by every command: the repo root, the pinned ICU check, then the command's exports.

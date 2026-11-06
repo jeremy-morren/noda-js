@@ -68,6 +68,9 @@ export type HttpRequestException = NodaError<"HttpRequestException"> & {
 /** System.TimeZoneNotFoundException (and the exceptions derived from it): a time zone wasn't found. */
 export type TimeZoneNotFoundException = NodaError<NodaErrorCodeOrDerived<"TimeZoneNotFoundException">>;
 
+/** System.InvalidTimeZoneException: a system time zone's data is invalid (noda-js/system, on Windows). */
+export type InvalidTimeZoneException = NodaError<"InvalidTimeZoneException">;
+
 /** Creates a NodaError with extra members. */
 function Create<T>(code: NodaErrorCode, message: string, members: object, options?: { cause?: unknown }): T {
   const error = new NodaError(code, message, options);
@@ -186,4 +189,20 @@ export function NewInvalidDataException(message?: string): InvalidDataException 
  */
 export function NewHttpRequestException(message: string, statusCode: number | null, options?: { cause?: unknown }): HttpRequestException {
   return Create("HttpRequestException", message, { StatusCode: statusCode }, options);
+}
+
+/**
+ * new TimeZoneNotFoundException(message).
+ * @internal
+ */
+export function NewTimeZoneNotFoundException(message?: string, options?: { cause?: unknown }): TimeZoneNotFoundException {
+  return new NodaError("TimeZoneNotFoundException", message ?? "Exception of type 'System.TimeZoneNotFoundException' was thrown.", options);
+}
+
+/**
+ * new InvalidTimeZoneException(message).
+ * @internal
+ */
+export function NewInvalidTimeZoneException(message?: string, options?: { cause?: unknown }): InvalidTimeZoneException {
+  return new NodaError("InvalidTimeZoneException", message ?? "Exception of type 'System.InvalidTimeZoneException' was thrown.", options);
 }

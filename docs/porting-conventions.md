@@ -36,6 +36,12 @@ Every hand-ported file starts with:
 // as found in the LICENSE.txt file.
 ```
 
+noda-js's own code (in its own files: ported files only get small, commented additions) starts with
+`// noda-js: new code.` and what it is for. Code ported from .NET itself (only `src/noda-js/System/`: the parts of
+`System.TimeZoneInfo` and `System.DateTime` that NodaTime's `BclDateTimeZone` uses, for `noda-js/system`) starts with
+`// noda-js: port of <what> from dotnet/runtime (<path>).` and `// Copyright (c) .NET Foundation and Contributors. Licensed
+under the MIT license (see NOTICE.txt).`, and follows the same rules: line by line, the .NET names and comments.
+
 Keep NodaTime's XML doc comments, converted to JSDoc (`<summary>` text becomes the description,
 `<param>` → `@param`, `<returns>` → `@returns`, `<exception cref="X">` → `@throws {XError}`,
 `<see cref="Foo.Bar"/>` → `{@link Foo.Bar}`). Keep implementation comments verbatim.
@@ -49,7 +55,7 @@ cycles harmless:
    `import { Duration, Preconditions } from "./internal.ts"`), never from each other's files. The barrel
    lists modules in a safe evaluation order (base classes before subclasses). Leaf modules that import
    nothing from the barrel (generated constants, `Utility/` helpers) may be imported directly.
-   Code in a separate entry point (`src/noda-js/TimeZones/Tzdb...`, `src/noda-js/Browser/`, `src/noda-js/Testing/`) imports core
+   Code in a separate entry point (`src/noda-js/TimeZones/Tzdb...`, `src/noda-js/System/`, `src/noda-js/Testing/`) imports core
    from `internal.ts` too, and must not be added to it.
 2. **No module-level code may use another module's exports at evaluation time**, except `extends`
    (handled by the barrel order) and leaf modules. In particular C# `static readonly` fields and
@@ -100,7 +106,7 @@ Use `import type` for type-only imports. Relative imports use `.ts` extensions (
 | `ToString()` | `toString()` — NodaTime's default pattern **with the invariant culture** (NodaTime uses the current culture; JS has none). |
 | `ToString(string?, IFormatProvider?)` | `toString(patternText?: string \| null, formatProvider?: IFormatProvider \| null)` |
 | `Deconstruct` | omitted (JS destructuring works on getters: `const { Year, Month } = date`). |
-| `IXmlSerializable`, `TypeConverter`, BCL interop (`DateTime`, `TimeSpan`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeProvider`, `Stopwatch`), `HighPerformance`, `BclDateTimeZone` | Not ported (listed in [api-differences.md](api-differences.md)). Leave a one-line `// Not ported: <member> (<reason>)` comment where the member was, so diffs against the C# stay readable. |
+| `IXmlSerializable`, `TypeConverter`, BCL interop (`DateTime`, `TimeSpan`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeProvider`, `Stopwatch`), `HighPerformance` | Not ported (listed in [api-differences.md](api-differences.md)). Leave a one-line `// Not ported: <member> (<reason>)` comment where the member was, so diffs against the C# stay readable. |
 
 ### JSON
 
@@ -125,7 +131,7 @@ overflow throws `OverflowException` unless the code is in an `unchecked` block.
 
 **No `BigInt` anywhere in `src/`** (no `bigint` type, `BigInt(...)` or `123n` literal): the runtime baseline is
 **ES2015** (Chrome 51, Firefox 54, Safari 10, Edge 15). `tsconfig.json` targets ES2015 with the ES2015 library (plus the
-`Intl` typings that `src/noda-js/Browser` feature-checks), so `tsc` rejects later runtime APIs; use the helpers in `src/noda-js/Utility`
+`Intl` typings that `src/noda-js/System` feature-checks), so `tsc` rejects later runtime APIs; use the helpers in `src/noda-js/Utility`
 instead (`PadStart`/`PadEnd` from `Utility/StringPadding.ts`, `indexOf` for array `includes`, `Object.keys` for
 `Object.entries`). Tests run on Node and use `test/tsconfig.json` (newer library, Node types); `npm run typecheck`
 checks both. Generated source must follow the same rule (`Ts.SourceInt` in the tools); generated test data may use
@@ -143,7 +149,8 @@ from it. The hierarchy is `BaseCodesByCode` in `NodaError.ts`.
 - **The .NET library's exceptions** (`ArgumentException`, `ArgumentNullException`, `ArgumentOutOfRangeException`,
   `InvalidOperationException`, `OverflowException`, `DivideByZeroException`, `NotSupportedException`,
   `NotImplementedException`, `FormatException`, `KeyNotFoundException`, `IndexOutOfRangeException`,
-  `InvalidCastException`, `InvalidDataException`, `HttpRequestException`, `TimeZoneNotFoundException`) are **types,
+  `InvalidCastException`, `InvalidDataException`, `HttpRequestException`, `TimeZoneNotFoundException`,
+  `InvalidTimeZoneException`) are **types,
   not classes**, in `src/noda-js/Utility/SystemExceptions.ts`: a `NodaError` with that code (or a derived one), plus
   the .NET type's own members (`ParamName`, `ActualValue`, `StatusCode`). Ported code creates them with that file's
   internal factories, which take the .NET constructor's parameters: `throw new ArgumentOutOfRangeException(nameof(x),

@@ -1,5 +1,5 @@
 // noda-js: the core entry point ("noda-js"). NodaTime's public API, minus time-zone data sources
-// (noda-js/tzdb, noda-js/tzdb/bundled, noda-js/browser, noda-js/windows), cultures
+// (noda-js/tzdb, noda-js/tzdb/bundled, noda-js/system, noda-js/windows), cultures
 // (noda-js/cultures/<name>) and test helpers (noda-js/testing).
 
 export {

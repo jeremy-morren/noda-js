@@ -56,6 +56,18 @@ meeting.InZoneLeniently(madrid).ToInstant();    // 2024-03-01T08:30:00Z
 
 `CompileTzdbSync` is synchronous. `CompileTzdbToNzd` returns NZD bytes to cache for `TzdbDateTimeZoneSource.FromBytes`.
 
+The host system's own zones (NodaTime's `DateTimeZoneProviders.Bcl`) are in `noda-js/system`: on Windows, Windows'
+zones read exactly as .NET's `TimeZoneInfo` reads them (via `node:ffi`), elsewhere the host's `Intl` zones:
+
+```ts
+import { SystemDateTimeZoneProvider } from "noda-js/system";
+
+SystemDateTimeZoneProvider.GetSystemDefault();     // "AUS Eastern Standard Time" on Windows, "Australia/Sydney" elsewhere
+tzdb.GetSystemDefault();                           // Australia/Sydney (both honour the TZ environment variable)
+```
+
+All about the providers, the system default zone and Windows zones: [docs/Timezones.md](docs/Timezones.md).
+
 ### Formatting and parsing
 
 ```ts
@@ -154,7 +166,7 @@ const tzdbLatest = new DateTimeZoneCache(source);
 
 | Package                                    | What it is  | npm | GitHub Packages |
 |--------------------------------------------|-------------|-----|-----------------|
-| [`noda-js`](src/noda-js/README.md)         | The port itself: every NodaTime type, text patterns, time zones (bundled tzdb or the browser's), cultures, testing helpers | [noda-js](https://www.npmjs.com/package/noda-js) | [@jeremy-morren/noda-js](https://github.com/jeremy-morren/noda-js/pkgs/npm/noda-js) |
+| [`noda-js`](src/noda-js/README.md)         | The port itself: every NodaTime type, text patterns, time zones (bundled tzdb or the system's), cultures, testing helpers | [noda-js](https://www.npmjs.com/package/noda-js) | [@jeremy-morren/noda-js](https://github.com/jeremy-morren/noda-js/pkgs/npm/noda-js) |
 | [`noda-js-zod`](src/noda-js-zod/README.md) | Zod schemas that parse NodaTime's JSON formats into noda-js values (`NodaZ.Instant`, ...) | [noda-js-zod](https://www.npmjs.com/package/noda-js-zod) | [@jeremy-morren/noda-js-zod](https://github.com/jeremy-morren/noda-js/pkgs/npm/noda-js-zod) |
 
 GitHub Packages are prefixed with `@jeremy-morren/...`. noda-js-zod imports `"noda-js"`, 
@@ -170,7 +182,7 @@ or scripting engines. It needs only ES2015 (Chrome 51, Firefox 54, Safari 10, Ed
 It uses the host's own APIs where they're available, since those are likely optimised (`Intl` for culture-aware
 comparisons and the host's languages, `TextDecoder`, `Uint8Array.fromBase64` / `atob`, `performance`,
 `DecompressionStream`), and always has its own implementation to fall back on. Only two features need the host:
-`noda-js/browser` (time zones from the host's `Intl`; use the bundled tzdb elsewhere) and
+`noda-js/system` (the host's time zones: Windows' through FFI, or `Intl`'s; use the bundled tzdb elsewhere) and
 `NodaCultureInfo.CurrentCulture` (the host's language; pass a culture elsewhere). (Compiling tzdata from a URL also
 needs the host's `fetch`; pass the archive's bytes elsewhere.) The tests run on Node, Chromium, Firefox and WebKit,
 without those APIs, and in [QuickJS](https://bellard.org/quickjs/), an embedded engine that has none of them.
@@ -179,7 +191,7 @@ without those APIs, and in [QuickJS](https://bellard.org/quickjs/), an embedded 
 
 Each [release](https://github.com/jeremy-morren/noda-js/releases/latest) has `noda-js-module-<version>.zip` and
 `noda-js-module-<version>.tar.gz`: one ES module, `noda-js.js` (and its source map), with everything in the npm package (the
-core, the bundled tzdb and the tzdb compiler, every culture, the browser and Windows providers, the testing helpers and
+core, the bundled tzdb and the tzdb compiler, every culture, the system and Windows providers, the testing helpers and
 the linq comparers), for a browser's `<script type="module">`, Deno, or an embedded engine that loads ES modules:
 
 ```html
@@ -197,6 +209,7 @@ from this repository by its release workflow:
 
 C# `long` arguments accept a number or, for exact values beyond 2⁵³, a decimal string.
 - Differences from NodaTime: [docs/api-differences.md](docs/api-differences.md)
+- Time zones (providers, the system default, Windows): [docs/Timezones.md](docs/Timezones.md)
 - How the port is written: [docs/porting-conventions.md](docs/porting-conventions.md)
 - Tests: [test/README.md](test/README.md)
 

@@ -1,9 +1,8 @@
 // noda-js: Windows (BCL) time zone IDs, mapped to tzdb zones using CLDR's windowsZones.xml.
 //
-// NodaTime's BclDateTimeZoneSource wraps the host's TimeZoneInfo. There is no TimeZoneInfo in JS, and
-// Windows' zone rules have no redistributable source, so noda-js supports Windows zone *IDs* only: a
-// Windows ID (e.g. "AUS Eastern Standard Time", as found in data produced by .NET apps) is mapped to its
-// CLDR primary tzdb zone ("Australia/Sydney"), whose rules come from tzdb.
+// On any host, a Windows ID (e.g. "AUS Eastern Standard Time", as found in data produced by .NET apps) is mapped to
+// its CLDR primary tzdb zone ("Australia/Sydney"), whose rules come from tzdb. (Windows' own rules have no
+// redistributable source: noda-js/system reads them from the Windows machine it runs on, as .NET does.)
 
 import { CreateReadOnlyList, MapZone, WindowsZones, type DateTimeZone, type IDateTimeZoneProvider } from "../internal.ts";
 import { cldrWindowsZones } from "./CldrWindowsZones.generated.ts";

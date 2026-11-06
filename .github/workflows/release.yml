@@ -15,7 +15,8 @@ name: release
 # noda-js-zod): Settings → Trusted publishing → GitHub Actions, repository jeremy-morren/noda-js, workflow
 # release.yml, environment npm; it can be limited to staged publishing ("stage-only"), so this workflow can never
 # publish live by itself. (npm only allows that once a package exists, so the very first version of a new package name
-# is published by hand; staging also needs the package to exist.) npm never accepts the same version twice, so a
+# is published by hand; staging also needs the package to exist. That includes the Windows native addon packages,
+# noda-js-win32-x64 and noda-js-win32-arm64.) npm never accepts the same version twice, so a
 # version that was published can't be released again, even if its GitHub release was deleted.
 
 on:
@@ -28,7 +29,61 @@ permissions:
   attestations: write # the single-file module's build provenance
 
 jobs:
+  # The release's version, from its tag.
+  version:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Version from the tag
+        id: version
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/version-from-tag.ps1 -Tag "$TAG"
+
+  # The Windows native addon packages (noda-js-win32-x64, noda-js-win32-arm64), each built on its own architecture
+  # (scripts/build-native.ps1; the build is reproducible) and packed with the release's version: rebuilt here, then compared with the release's assets by the publish job.
+  native:
+    needs: version
+    name: native (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      # No cache: these tarballs are release assets (cache poisoning).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci
+      - name: Set the package versions
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/set-versions.ps1 -Version '${{ needs.version.outputs.version }}'
+      - run: npm run build:native
+      - name: Pack
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          npm pack ./src/noda-js-win32-${{ matrix.arch }} --pack-destination artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.arch }}
+          path: artifacts/noda-js-win32-*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
+    needs: native
     runs-on: ubuntu-latest
     environment: npm
     defaults:
@@ -45,7 +100,7 @@ jobs:
       # No caches anywhere in this workflow: a publishing run must not restore anything another run could have written (cache poisoning).
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
       # The pinned SDK, for tools/NodaJs.Package (npm run build:module's archives).
       - uses: actions/setup-dotnet@v6
         with:
@@ -69,6 +124,9 @@ jobs:
       # The tests run on Node and in Chromium, Firefox and WebKit, as in ci.yml (browsers downloaded fresh: no cache).
       - name: Install browsers
         run: npx playwright install --with-deps chromium firefox webkit
+      # The pinned Hermes VM (SHA-256 checked), for test/module/hermes.test.ts, as in ci.yml.
+      - name: Install Hermes
+        run: npm run test:install-hermes
       - run: npm test
       - run: npm run build
       - run: npm run check:package
@@ -79,6 +137,12 @@ jobs:
       - run: npm run build:module
       - name: Pack
         run: npm pack --workspaces --pack-destination artifacts
+      # The native addon packages, rebuilt by the native jobs.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: artifacts
+          merge-multiple: true
       - name: The release's assets match this build
         run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/compare-release-assets.ps1 -Tag "$TAG" -Built artifacts
       # Build provenance for the single-file module: a Sigstore-signed statement, stored by GitHub (not in the files),
@@ -97,7 +161,11 @@ jobs:
       # Packages tab on npmjs.com) before it's published. Each package's publishConfig sets access=public and
       # provenance=true. Fails if a version is already on npm.
       - name: Stage the packages on npm
-        run: npm stage publish --workspaces
+        run: |
+          npm stage publish --workspaces
+          for tarball in artifacts/noda-js-win32-*.tgz; do
+            npm stage publish "$tarball"
+          done
 
   # GitHub Packages: the same tarballs, renamed @<owner>/<name> (see scripts/publish-github-packages.ps1). A separate
   # job, so that it can be re-run on its own if it fails after npm succeeded.
@@ -121,7 +189,7 @@ jobs:
           global-json-file: tools/global.json
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           # Writes an .npmrc that authenticates npm.pkg.github.com with NODE_AUTH_TOKEN.
           registry-url: https://npm.pkg.github.com
       - name: Publish to GitHub Packages

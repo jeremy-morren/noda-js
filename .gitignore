@@ -439,3 +439,6 @@ src/*/LICENSE.txt
 src/*/NOTICE.txt
 # JetBrains Rider
 .idea/
+# noda-js: the Windows native addon (native/windows, scripts/build-native.ps1).
+native/windows/build/
+src/noda-js-win32-*/time-zones.node

@@ -5,14 +5,13 @@ on:
     branches: [main]
   pull_request:
 
-# The reporting steps write a check run and (on pull requests) PR comments.
+# The report job writes a check run and (on pull requests) PR comments.
 permissions:
   contents: read
-  checks: write
-  pull-requests: write
 
 jobs:
-  test:
+  # Everything but the tests: type checks, the build, the linters and package checks, reproducibility, the module.
+  checks:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,34 +24,201 @@ jobs:
           global-json-file: tools/global.json
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
       - run: npm ci
       # Every installed package's registry signature (and provenance attestation, where it has one) checks out.
       - run: npm audit signatures
       - run: npm run typecheck
+      - run: npm run build
+      # All the linters: ESLint (src/ stays within ES2015 built-ins, eslint-plugin-es-x; every {@link} resolves), and
+      # the package as published (exports/types resolve: publint, arethetypeswrong; a consumer type-checks against
+      # dist/). Then two clean builds give byte-identical tarballs.
+      - run: npm run check:package
+      - run: npm run check:reproducible
+      # The single-file module and its release archives, as the release workflows build them.
+      - run: npm run build:module
 
-      # The tests also run in Chromium, Firefox and WebKit (Vitest browser mode, Playwright). The browser builds are
-      # cached per Playwright version; `install` then only downloads what's missing, and installs the OS packages
-      # they need (those aren't cached).
+  # The tests, on Linux, Windows and macOS: Node and the three Playwright engines (Chromium, Firefox, WebKit) on each,
+  # plus Microsoft Edge on Windows, and Safari and Mobile Safari (iOS Simulator) on macOS. One job per OS and project.
+  # Each writes a blob report labelled with where it ran (scripts/test-blob.ps1); the report job merges them.
+  # (Public repository: macOS minutes are free; macOS jobs beyond the plan's concurrency queue.)
+  test:
+    name: test (${{ matrix.os }}, ${{ matrix.project }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout || 60 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        project: [node, chromium, firefox, webkit]
+        include:
+          # Branded Edge (Playwright's msedge channel): installed on GitHub's Windows images.
+          - os: windows-latest
+            project: edge
+          # Windows on ARM64: the node project (with the arm64 native addon).
+          - os: windows-11-arm
+            project: node
+          # Safari, through safaridriver (WebdriverIO).
+          - os: macos-latest
+            project: safari
+          # Mobile Safari in the iOS Simulator, through safaridriver (WebdriverIO).
+          - os: macos-latest
+            project: ios-safari
+            timeout: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      # The pinned SDK, for scripts/export-system-zones.ps1 (tools/NodaJs.Tools) on Windows.
+      - uses: actions/setup-dotnet@v6
+        if: runner.os == 'Windows'
+        with:
+          global-json-file: tools/global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+
+      # The Playwright engine this job tests, cached per OS, engine and Playwright version; `install` then only
+      # downloads what's missing, and installs the OS packages it needs (those aren't cached).
       - name: Playwright version
         id: playwright
-        run: echo "version=$(jq -r .version node_modules/playwright/package.json)" >> "$GITHUB_OUTPUT"
+        if: contains(fromJSON('["chromium", "firefox", "webkit"]'), matrix.project)
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6
+        if: steps.playwright.outputs.version
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
-      - name: Install browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+            ~/AppData/Local/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.project }}-${{ steps.playwright.outputs.version }}
+      - name: Install ${{ matrix.project }}
+        if: steps.playwright.outputs.version
+        run: npx playwright install --with-deps ${{ matrix.project }}
 
-      # Tests on Node, Chromium, Firefox and WebKit, with coverage (from the node project):
-      # writes test-results/junit.xml (one suite per test file and project) and coverage/coverage-{summary,final}.json.
+      # The node project also runs the single-file module in Hermes (test/module/hermes.test.ts).
+      - name: Install Hermes
+        if: matrix.project == 'node'
+        run: npm run test:install-hermes
+      - name: Enable safaridriver
+        if: matrix.project == 'safari' || matrix.project == 'ios-safari'
+        run: sudo safaridriver --enable
+      - name: Boot the iOS Simulator
+        if: matrix.project == 'ios-safari'
+        run: npm run test:start-ios-simulator
+      # What .NET's TimeZoneInfo (NodaTime's BclDateTimeZoneSource) sees on this machine, for the Windows-only system
+      # time zone tests (test-results/system-zones.json; they're skipped without it).
+      - name: Export the system time zones
+        if: runner.os == 'Windows' && hashFiles('scripts/export-system-zones.ps1') != ''
+        run: npm run test:export-system-zones
+
+      # The Windows native addon (src/noda-js-win32-<arch>), for test/system/environment.test.ts, which runs real
+      # processes with and without it (and with and without node:ffi).
+      - name: Build the native addon
+        if: runner.os == 'Windows' && matrix.project == 'node'
+        run: npm run build:native
+
+      # test-results/blob/<project>-<os>.json, with coverage from the node project.
       - name: Test
-        id: test
-        run: npm run test:ci
+        run: npm run test:blob -- -Project ${{ matrix.project }} ${{ matrix.project == 'node' && '-Coverage' || '' }}
+      # On an iOS failure: what the simulator shows, and safaridriver's logs.
+      - name: Collect the iOS Simulator's state
+        if: failure() && matrix.project == 'ios-safari'
+        run: |
+          mkdir -p test-results/ios
+          xcrun simctl io booted screenshot test-results/ios/screen.png || true
+          cp -R ~/Library/Logs/com.apple.WebDriver test-results/ios/ 2>/dev/null || true
+      - uses: actions/upload-artifact@v7
+        if: failure() && matrix.project == 'ios-safari'
+        with:
+          name: ios-diagnostics
+          path: test-results/ios/
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-${{ matrix.project }}-${{ runner.os }}-${{ runner.arch }}
+          path: test-results/blob/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Chrome on Android, in an emulator (KVM on a Linux runner, a Google APIs image, which has Chrome), driven by Appium's
+  # UiAutomator2 driver through WebdriverIO (scripts/test-android.sh).
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - name: Enable KVM
+        run: bash scripts/enable-kvm.sh
+      - name: Install Appium
+        run: npm install --global appium@3.8.0 && appium driver install uiautomator2@8.7.0
+      - name: Test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          ram-size: 4096M
+          disk-size: 6000M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: npm run test:android
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-android-chrome
+          path: test-results/blob/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: ${{ failure() }}
+        with:
+          name: appium-log
+          path: test-results/appium*.log
+
+  # Merges every test job's blob report (scripts/merge-test-reports.ps1) into test-results/junit.xml (each suite named
+  # "<file> [<project>, <os or device>]") and the node project's coverage from every OS (coverage/), then publishes them.
+  # Runs even when tests fail, so the failures are reported; it fails too, at the Merge step.
+  report:
+    needs: [test, android]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: blob-*
+          path: test-results/blob
+          merge-multiple: true
+      - name: Merge
+        run: npm run test:merge
 
       # Test results: job summary, a check run, and a comment on the pull request (updated on each push).
-      # Runs even when tests fail, so the failures are reported; the job still fails at the Test step.
       - name: Publish test results
         if: ${{ !cancelled() && hashFiles('test-results/junit.xml') != '' }}
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -60,9 +226,10 @@ jobs:
           files: test-results/junit.xml
           check_name: Test results
           comment_title: Test results
-          # Only list failures in the comment/summary; 60k+ test names would overflow both.
+          # Only list failures in the comment/summary; a million test names would overflow both.
           report_individual_runs: false
           json_suite_details: false
+          large_files: true
 
       # Coverage: job summary and a comment on the pull request (updated on each push), with per-file
       # coverage for the files the pull request changes.
@@ -73,12 +240,3 @@ jobs:
           json-summary-path: coverage/coverage-summary.json
           json-final-path: coverage/coverage-final.json
           file-coverage-mode: changes
-
-      - run: npm run build
-      # All the linters: ESLint (src/ stays within ES2015 built-ins, eslint-plugin-es-x; every {@link} resolves), and
-      # the package as published (exports/types resolve: publint, arethetypeswrong; a consumer type-checks against
-      # dist/). Then two clean builds give byte-identical tarballs.
-      - run: npm run check:package
-      - run: npm run check:reproducible
-      # The single-file module and its release archives, as the release workflows build them.
-      - run: npm run build:module

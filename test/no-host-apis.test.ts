@@ -14,7 +14,8 @@ type Core = typeof import("../src/noda-js/index.ts");
 
 let noda: Core;
 let tzdb: typeof import("../src/noda-js/entries/tzdb-bundled.ts").tzdb;
-let browser: typeof import("../src/noda-js/entries/browser.ts").browser;
+let system: typeof import("../src/noda-js/entries/system.ts");
+let internal: typeof import("../src/noda-js/internal.ts");
 let cultures: typeof import("../src/noda-js/Cultures/index.generated.ts");
 let compiler: typeof import("../src/noda-js/entries/tzdb-compiler.ts");
 let fromBase64: PropertyDescriptor | undefined;
@@ -31,7 +32,8 @@ beforeAll(async () => {
   vi.resetModules();
   noda = await import("../src/noda-js/index.ts");
   ({ tzdb } = await import("../src/noda-js/entries/tzdb-bundled.ts"));
-  ({ browser } = await import("../src/noda-js/entries/browser.ts"));
+  system = await import("../src/noda-js/entries/system.ts");
+  internal = await import("../src/noda-js/internal.ts");
   cultures = await import("../src/noda-js/Cultures/index.generated.ts");
   compiler = await import("../src/noda-js/entries/tzdb-compiler.ts");
   // Re-importing (and transforming) the whole library takes seconds, more when the full suite runs alongside.
@@ -97,13 +99,24 @@ describe("without Intl, navigator, TextDecoder, atob, Uint8Array.fromBase64 or p
     expect(() => noda.NodaCultureInfo.CurrentCulture).toThrow(/The host reports no languages/);
   });
 
-  it("the tzdb provider can't name the system's zone: GetSystemDefault throws DateTimeZoneNotFoundException", () => {
-    expect(() => tzdb.GetSystemDefault()).toThrow(noda.DateTimeZoneNotFoundException);
+  it("the tzdb provider can't name the system's zone, so it guesses it from Date's offsets (GuessZoneIdByTransitions)", () => {
+    // (Unless TZ names it.)
+    const zone = tzdb.GetSystemDefault();
+    for (const month of [0, 6]) {
+      const instant = noda.Instant.FromUtc(new Date(now).getUTCFullYear(), month + 1, 15, 12, 0);
+      // 0 - x, not -x: in UTC, getTimezoneOffset() is 0, and -0 isn't +0 to toBe.
+      expect(zone.GetUtcOffset(instant).Seconds).toBe(0 - new Date(instant.ToUnixTimeMilliseconds()).getTimezoneOffset() * 60);
+    }
   });
 
-  it("noda-js/browser says it needs Intl, on first use", () => {
-    expect(() => browser.Ids).toThrowNodaError("InvalidOperationException");
-    expect(() => browser.Ids).toThrow(/needs the host's Intl/);
+  it("noda-js/system says it needs Intl, on first use, unless it can read Windows' zones (Windows, with node:ffi)", () => {
+    if (internal.TimeZoneInfoInterceptor.Shim === null) {
+      expect(() => system.SystemDateTimeZoneProvider.Ids).toThrowNodaError("InvalidOperationException");
+      expect(() => system.SystemDateTimeZoneProvider.Ids).toThrow(/needs the host's Intl/);
+    } else {
+      expect(new system.SystemDateTimeZoneSource().Backend).not.toBe("intl");
+      expect(system.SystemDateTimeZoneProvider.Get("AUS Eastern Standard Time").GetUtcOffset(noda.Instant.FromUtc(2024, 7, 1, 0, 0)).Seconds).toBe(36000);
+    }
   });
 
   it("noda-js/tzdb/compiler compiles a .tar.gz without DecompressionStream, TextEncoder, fetch or XMLHttpRequest (a URL needs one of them)", async () => {

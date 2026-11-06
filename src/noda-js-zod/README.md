@@ -54,7 +54,7 @@ NodaZ.Instant.safeParse("2024-13-01T00:00:00Z").error?.issues;
 you use:
 
 ```ts
-import { tzdb } from "noda-js/tzdb/bundled"; // or a provider from noda-js/tzdb, noda-js/browser, ...
+import { tzdb } from "noda-js/tzdb/bundled"; // or a provider from noda-js/tzdb, noda-js/system, ...
 
 const ZonedDateTimeSchema = NodaZ.ZonedDateTime(tzdb); // create once, reuse
 const meeting = ZonedDateTimeSchema.parse("2024-01-31T12:00:00+01 Europe/Madrid");

@@ -37,7 +37,7 @@ methods (`date.PlusDays(1)`). Members JS calls by name keep their JS names: `toS
 | `noda-js/tzdb/bundled` | `tzdb`: a time zone provider over the bundled IANA time zone database (the equivalent of `DateTimeZoneProviders.Tzdb`) |
 | `noda-js/tzdb` | `TzdbDateTimeZoneSource`: load a newer NZD file at runtime (e.g. from nodatime.org) without bundling one |
 | `noda-js/tzdb/compiler` | `CompileTzdb`, `CompileTzdbToNzd`, and the synchronous `CompileTzdbSync`, `CompileTzdbToNzdSync`: compile an IANA tzdata release at runtime into a time zone source or an NZD file, as NodaTime's TzdbCompiler does. The release can be a URL such as `https://data.iana.org/time-zones/tzdata-latest.tar.gz`, downloaded with `fetch` or a synchronous `XMLHttpRequest`. It can also be its bytes in any form, a `Blob`, or (async only) a `Request`, `Response` or stream |
-| `noda-js/browser` | `browser`: a provider over the host's own time zones (`Intl`), much smaller than the bundled tzdb |
+| `noda-js/system` | `SystemDateTimeZoneProvider`: the host system's time zones (NodaTime's `DateTimeZoneProviders.Bcl`): on Windows, Windows' zones read as .NET's `TimeZoneInfo` reads them (via FFI); elsewhere, the host's `Intl` zones ([docs](https://github.com/jeremy-morren/noda-js/blob/main/docs/Timezones.md)) |
 | `noda-js/windows` | Windows time zone IDs ↔ IANA IDs (CLDR's mapping) |
 | `noda-js/cultures` | Every culture as a named export (`enAU`, `esES`, ...); bundles keep only the ones you import. The invariant culture is built in. `NodaCultureInfo.CurrentCulture` is the culture of the host's language, among the cultures the app uses. |
 | `noda-js/cultures/all` | `import "noda-js/cultures/all"`: bundles and registers every culture, so `NodaCultureInfo.CurrentCulture` can return any of them |
@@ -48,8 +48,8 @@ methods (`date.PlusDays(1)`). Members JS calls by name keep their JS names: `toS
 
 ## Compatibility
 
-ES2015 with no polyfills and no `BigInt` (Chrome 51, Firefox 54, Safari 10, Edge 15); `noda-js/browser` also
-needs `Intl.DateTimeFormat.prototype.formatToParts` (Chrome 57, Firefox 51, Safari 11, Edge 18). ESM only, with
+ES2015 with no polyfills and no `BigInt` (Chrome 51, Firefox 54, Safari 10, Edge 15); `noda-js/system`'s `Intl`
+zones also need `Intl.DateTimeFormat.prototype.formatToParts` (Chrome 57, Firefox 51, Safari 11, Edge 18). ESM only, with
 TypeScript types; side-effect free (except `noda-js/cultures/all` and `noda-js/calendars/*`, which register what they
 contain), so bundlers drop what you don't use.
 

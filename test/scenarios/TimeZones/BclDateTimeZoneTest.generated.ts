@@ -8,78 +8,83 @@ import type { ScenarioFixture } from "../types.ts";
 export const fixture: ScenarioFixture = {
   name: "NodaTime.Test.TimeZones.BclDateTimeZoneTest",
   source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs",
-  excluded: "host TimeZoneInfo data",
   tests: [
     {
       method: "AreWindowsStyleRules",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:60",
       parameters: ["NamedWrapper<TimeZoneInfo> zoneWrapper"],
-      excluded: "host TimeZoneInfo data",
+      excluded: "host TimeZoneInfo data (test/system/)",
       cases: [],
     },
     {
       method: "AllZoneTransitions",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:75",
       parameters: ["NamedWrapper<TimeZoneInfo> windowsZoneWrapper"],
-      excluded: "host TimeZoneInfo data",
+      excluded: "host TimeZoneInfo data (test/system/)",
       cases: [],
     },
     {
       method: "DisplayName",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:109",
       parameters: ["NamedWrapper<TimeZoneInfo> windowsZoneWrapper"],
-      excluded: "host TimeZoneInfo data",
+      excluded: "host TimeZoneInfo data (test/system/)",
       cases: [],
     },
     {
       method: "AllZonesEveryWeek",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:127",
       parameters: ["NamedWrapper<TimeZoneInfo> windowsZoneWrapper"],
-      excluded: "host TimeZoneInfo data",
+      excluded: "host TimeZoneInfo data (test/system/)",
       cases: [],
     },
     {
       method: "AllZonesStartAndEndOfTime",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:141",
       parameters: ["NamedWrapper<TimeZoneInfo> windowsZoneWrapper"],
-      excluded: "host TimeZoneInfo data",
+      excluded: "host TimeZoneInfo data (test/system/)",
       cases: [],
     },
     {
       method: "ForSystemDefault",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:164",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "DateTimeMinValueStartRuleExtendsToBeginningOfTime",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:177",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "AwkwardLeapYears",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:207",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "LocalZoneIsNull",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:257",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "FakeDaylightSavingTime",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:267",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "TransitionAtMidnight",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.cs:300",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
   ],
 };

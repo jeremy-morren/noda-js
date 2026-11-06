@@ -8,49 +8,55 @@ import type { ScenarioFixture } from "../types.ts";
 export const fixture: ScenarioFixture = {
   name: "NodaTime.Test.TimeZones.BclDateTimeZoneSourceTest",
   source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs",
-  excluded: "host TimeZoneInfo data",
   tests: [
     {
       method: "UtcDoesNotEqualBuiltIn",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:16",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "FixedOffsetDoesNotEqualBuiltIn",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:23",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "ForId_Invalid",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:39",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "CanLookupLocalTimeZoneById",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:45",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "ProviderReturnsBclDateTimeZoneForAllAdvertisedIds",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:86",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "LocalZoneIsNotSystemZone",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:95",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
     {
       method: "LocalZoneIsNull",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneSourceTest.cs:110",
-      excluded: "host TimeZoneInfo data",
-      cases: [],
+      cases: [
+        { args: [] },
+      ],
     },
   ],
 };

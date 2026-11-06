@@ -1,0 +1,41 @@
+{
+  "name": "noda-js-win32-arm64",
+  "version": "0.0.0-development",
+  "description": "Optional native addon for noda-js/system on Windows on ARM64: reads Windows' time zone data as .NET's TimeZoneInfo does, without Node's experimental FFI. Installed automatically with noda-js; not used directly.",
+  "keywords": [
+    "nodatime",
+    "noda-js",
+    "timezone",
+    "windows"
+  ],
+  "homepage": "https://github.com/jeremy-morren/noda-js/blob/main/docs/Timezones.md",
+  "bugs": {
+    "url": "https://github.com/jeremy-morren/noda-js/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeremy-morren/noda-js.git",
+    "directory": "src/noda-js-win32-arm64"
+  },
+  "license": "Apache-2.0",
+  "author": "Jeremy Morren",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "main": "time-zones.node",
+  "files": [
+    "time-zones.node",
+    "LICENSE.txt",
+    "NOTICE.txt"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "prepack": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"Copy-Item ../../LICENSE.txt, ../../NOTICE.txt .\""
+  }
+}

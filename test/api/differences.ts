@@ -4,9 +4,7 @@
 /** Types ("Type") and members ("Type.CSharpMember") that aren't ported, with the reason. */
 export const notPorted: Readonly<Record<string, string>> = {
   // Not ported (docs/api-differences.md)
-  BclDateTimeZone: "no TimeZoneInfo in JS; Windows IDs are supported via noda-js/windows",
-  BclDateTimeZoneSource: "no TimeZoneInfo in JS; Windows IDs are supported via noda-js/windows",
-  DateTimeZoneProviders: "no global provider registry; import noda-js/tzdb/bundled or noda-js/browser",
+  DateTimeZoneProviders: "no global provider registry; import noda-js/tzdb/bundled or noda-js/system",
   DateTimeExtensions: "BCL interop",
   DateTimeOffsetExtensions: "BCL interop",
   DateOnlyExtensions: "BCL interop",
@@ -55,6 +53,12 @@ export const notPorted: Readonly<Record<string, string>> = {
   "ZonedDateTimeComparer.Compare": "abstract (implemented by Comparer.local / Comparer.instant)",
   "ZonedDateTimeComparer.Equals": "abstract (implemented by Comparer.local / Comparer.instant)",
   "DateTimeZone.GetZoneInterval": "abstract (implemented by every zone class)",
+};
+
+/** Types exported under another name (NodaTime's name → noda-js's), with all their members (BCL interop included). */
+export const renamedTypes: Readonly<Record<string, string>> = {
+  BclDateTimeZone: "SystemDateTimeZone",
+  BclDateTimeZoneSource: "SystemDateTimeZoneSource",
 };
 
 /** Members whose noda-js name isn't the mechanical camelCase of the C# name ("Type.CSharpMember" → name). */

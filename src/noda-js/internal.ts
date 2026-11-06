@@ -190,9 +190,15 @@ export * from "./TimeZones/TzdbZoneLocation.ts";
 export * from "./TimeZones/TzdbZone1970Location.ts";
 export * from "./TimeZones/TzdbDateTimeZoneSource.ts";
 
-// Browser (Intl) time zones (exposed by noda-js/browser)
-export * from "./Browser/BrowserDateTimeZone.ts";
-export * from "./Browser/BrowserDateTimeZoneSource.ts";
+// The host system's time zones (exposed by noda-js/system): .NET's TimeZoneInfo, ported, reading Windows' data; the
+// host's Intl zones elsewhere.
+export * from "./System/DateTime.ts";
+export * from "./System/TimeZoneInfo.TransitionTime.ts";
+export * from "./System/TimeZoneInfo.AdjustmentRule.ts";
+export * from "./System/TimeZoneInfo.ts";
+export * from "./TimeZones/TimeZoneInfoInterceptor.ts";
+export * from "./TimeZones/SystemDateTimeZone.ts";
+export * from "./TimeZones/SystemDateTimeZoneSource.ts";
 
 // NodaTime.Testing (exposed by noda-js/testing)
 export * from "./Testing/FakeClock.ts";

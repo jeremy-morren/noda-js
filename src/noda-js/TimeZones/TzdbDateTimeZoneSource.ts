@@ -3,7 +3,7 @@
 // Use of this source code is governed by the Apache License 2.0,
 // as found in the LICENSE.txt file.
 
-import { InvalidNodaDataException, MapZone, Preconditions, CreateReadOnlyList, CreateReadOnlyMap, TzdbStreamData } from "../internal.ts";
+import { InvalidNodaDataException, Instant, MapZone, Preconditions, CreateReadOnlyList, CreateReadOnlyMap, SystemClock, TzdbStreamData } from "../internal.ts";
 import type {
   DateTimeZone,
   IDateTimeZoneSource,
@@ -12,6 +12,7 @@ import type {
   WindowsZones,
 } from "../internal.ts";
 import { DecodeBase64 } from "../Utility/Encoding.ts";
+import { GetHostTimeZone, type IHostTimeZone } from "./HostTimeZone.ts";
 import { NewArgumentException, type KeyNotFoundException } from "../internal.ts";
 
 /**
@@ -247,27 +248,28 @@ export class TzdbDateTimeZoneSource implements IDateTimeZoneSource {
   /**
    * @inheritdoc
    *
-   * noda-js: the system time zone is the host's default `Intl` time zone
-   * (`Intl.DateTimeFormat().resolvedOptions().timeZone`), mapped as {@link TzdbDateTimeZoneSource.MapTimeZoneInfoId} describes.
+   * noda-js: the system time zone (TimeZoneInfo.Local in NodaTime) is the zone the TZ environment variable names, if
+   * it's set; otherwise the host's default `Intl` time zone (`Intl.DateTimeFormat().resolvedOptions().timeZone`), with
+   * the UTC offsets of the host's `Date`. It's mapped as {@link TzdbDateTimeZoneSource.MapTimeZoneInfoId} describes.
    */
   GetSystemDefaultId(): string | null {
-    return this.MapTimeZoneInfoId(GetIntlSystemTimeZoneId());
+    return this.MapTimeZoneInfoId(GetHostTimeZone());
   }
 
   /**
-   * Maps a system time zone ID to a TZDB ID: a Windows ID is mapped through the primary Windows mapping,
-   * and a TZDB ID known to this source is returned as-is.
+   * Maps a system time zone to a TZDB ID: a Windows ID is mapped through the primary Windows mapping,
+   * a TZDB ID known to this source is returned as-is, and otherwise the zone is guessed by its transitions.
    *
-   * noda-js: takes the system zone's ID rather than a `TimeZoneInfo`. NodaTime's final fallback of guessing the
-   * zone by comparing transitions isn't ported, so an unknown ID maps to null.
+   * noda-js: takes an {@link IHostTimeZone} (an ID and UTC offsets) rather than a `TimeZoneInfo`. A zone named by the
+   * TZ environment variable isn't guessed: if its ID doesn't map, the result is "Etc/UTC" (TZ naming no zone means UTC).
    * @internal
    */
-  MapTimeZoneInfoId(timeZoneId: string | null): string | null {
+  MapTimeZoneInfoId(timeZone: IHostTimeZone | null): string | null {
     // Unusual, but can happen in some Mono installations.
-    if (timeZoneId === null) {
+    if (timeZone === null) {
       return null;
     }
-    const id = timeZoneId;
+    const id = timeZone.Id;
     // First see if it's a Windows time zone ID.
     const result = this._source.WindowsMapping.PrimaryMapping.get(id);
     if (result !== undefined) {
@@ -277,13 +279,92 @@ export class TzdbDateTimeZoneSource implements IDateTimeZoneSource {
     if (this.CanonicalIdMap.has(id)) {
       return id;
     }
+    // noda-js: the TZ environment variable names a zone we don't know: UTC, as for Node, Python, glibc and .NET on
+    // Unix (rather than a guess).
+    if (timeZone.FromEnvironment) {
+      return this.CanonicalIdMap.has("Etc/UTC") ? "Etc/UTC" : null;
+    }
     // Maybe it's a Windows zone we don't have a mapping for, or we're on a Mono system
     // where TimeZoneInfo.Local.Id returns "Local" but can actually do the mappings.
-    // Not ported: GuessZoneIdByTransitions (needs a TimeZoneInfo to compare offsets with).
-    return null;
+    return this.GuessZoneIdByTransitions(timeZone);
   }
 
-  // Not ported: guesses, GuessZoneIdByTransitions, GuessZoneIdByTransitionsUncached (they work on a BCL TimeZoneInfo)
+  private readonly _guesses = new Map<string, string | null>();
+
+  // Cache around GuessZoneIdByTransitionsUncached
+  private GuessZoneIdByTransitions(zone: IHostTimeZone): string | null {
+    let guess = this._guesses.get(zone.Id);
+    if (guess === undefined) {
+      // Build the list of candidates here instead of within the method, so that
+      // tests can pass in the same list on each iteration. We order the time zones
+      // by ID so that if there are multiple zones with the same score, we'll always
+      // pick the same one across multiple runs/platforms.
+      // noda-js: in ordinal order (NodaTime's OrderBy uses the current culture's comparer).
+      const candidates = [...this.CanonicalIdMap.values()].map(id => this.ForId(id)).sort((a, b) => CompareOrdinal(a.Id, b.Id));
+      guess = TzdbDateTimeZoneSource.GuessZoneIdByTransitionsUncached(zone, candidates);
+      this._guesses.set(zone.Id, guess);
+    }
+    return guess;
+  }
+
+  /**
+   * In cases where we can't get a zone mapping directly, we try to work out a good fit
+   * by checking the transitions within the next few years.
+   * This can happen if the Windows data isn't up-to-date, or if we're on a system where
+   * TimeZoneInfo.Local.Id just returns "local", or if TimeZoneInfo.Local is a custom time
+   * zone for some reason. We return null if we don't get a 70% hit rate.
+   * We look at all transitions in all canonical IDs for the next 5 years.
+   * Heuristically, this seems to be good enough to get the right results in most cases.
+   * This method used to only be called in the PCL build in 1.x, but it seems reasonable enough to
+   * call it if we can't get an exact match anyway.
+   * @param zone Zone to resolve in a best-effort fashion.
+   * @param candidates All the Noda Time zones to consider - normally a list
+   * obtained from this source.
+   * @internal
+   */
+  static GuessZoneIdByTransitionsUncached(zone: IHostTimeZone, candidates: readonly DateTimeZone[]): string | null {
+    // See https://github.com/nodatime/nodatime/issues/686 for performance observations.
+    // Very rare use of the system clock! Windows time zone updates sometimes sacrifice past
+    // accuracy for future accuracy, so let's use the current year's transitions.
+    const thisYear = SystemClock.Instance.GetCurrentInstant().InUtc().Year;
+    const startOfThisYear = Instant.FromUtc(thisYear, 1, 1, 0, 0);
+    const startOfNextYear = Instant.FromUtc(thisYear + 5, 1, 1, 0, 0);
+    const instants: Instant[] = [];
+    const seen = new Set<number>();
+    for (const candidate of candidates) {
+      for (const zi of candidate.GetZoneIntervals(startOfThisYear, startOfNextYear)) {
+        const instant = Instant.Max(zi.RawStart, startOfThisYear); // Clamp to start of interval
+        // Distinct (by millisecond: tzdb's transitions are on whole seconds).
+        const key = instant.ToUnixTimeMilliseconds();
+        if (!seen.has(key)) {
+          seen.add(key);
+          instants.push(instant);
+        }
+      }
+    }
+    const bclOffsets = instants.map(instant => zone.GetUtcOffset(instant));
+    // For a zone to be mappable, at most 30% of the checks must fail
+    // - so if we get to that number (or whatever our "best" so far is)
+    // we know we can stop for any particular zone.
+    let lowestFailureScore = Math.trunc((instants.length * 30) / 100);
+    let bestZone: DateTimeZone | null = null;
+    for (const candidate of candidates) {
+      let failureScore = 0;
+      for (let i = 0; i < instants.length; i++) {
+        if (!candidate.GetUtcOffset(instants[i]!).Equals(bclOffsets[i]!)) {
+          failureScore++;
+          if (failureScore === lowestFailureScore) {
+            break;
+          }
+        }
+      }
+      if (failureScore < lowestFailureScore) {
+        lowestFailureScore = failureScore;
+        bestZone = candidate;
+      }
+    }
+    return bestZone?.Id ?? null;
+  }
 
   /**
    * Gets just the TZDB version (e.g. "2013a") of the source data.
@@ -443,12 +524,4 @@ function CompareOrdinal(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/** noda-js: the host's default time zone ID, or null if it doesn't have one. */
-function GetIntlSystemTimeZoneId(): string | null {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
-  } catch {
-    return null;
-  }
-}
 

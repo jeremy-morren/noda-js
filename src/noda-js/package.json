@@ -53,9 +53,9 @@
       "types": "./dist/entries/tzdb-compiler.d.ts",
       "default": "./dist/entries/tzdb-compiler.js"
     },
-    "./browser": {
-      "types": "./dist/entries/browser.d.ts",
-      "default": "./dist/entries/browser.js"
+    "./system": {
+      "types": "./dist/entries/system.d.ts",
+      "default": "./dist/entries/system.js"
     },
     "./testing": {
       "types": "./dist/entries/testing.d.ts",

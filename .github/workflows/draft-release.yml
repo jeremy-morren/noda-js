@@ -1,7 +1,8 @@
 name: draft release
 
 # On every push to main: works out the next version, builds and packs the packages with it, and creates a draft
-# GitHub release with the npm tarballs and the single-file module (noda-js-module-<version>.zip / .tar.gz) attached. Publishing the draft (by hand) runs release.yml, which publishes to npm.
+# GitHub release with the npm tarballs (including the Windows native addon packages, built on Windows x64 and ARM64
+# runners) and the single-file module (noda-js-module-<version>.zip / .tar.gz) attached. Publishing the draft (by hand) runs release.yml, which publishes to npm.
 #
 # The version: major.minor from the root package.json (maintained by hand, e.g. "0.2"); the patch is one more than the
 # highest published release of that major.minor, or 0. Drafts don't count, so until a draft is published, each push
@@ -21,7 +22,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The release's version, from the published releases (scripts/next-version.ps1).
+  version:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, for the HEAD tag check
+      - name: Next version
+        id: version
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/next-version.ps1
+      - name: HEAD isn't already released as another version
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-head-tag.ps1 -Version '${{ steps.version.outputs.version }}'
+
+  # The Windows native addon packages (noda-js-win32-x64, noda-js-win32-arm64), each built on its own architecture
+  # (scripts/build-native.ps1; the build is reproducible) and packed with the release's version.
+  native:
+    needs: version
+    name: native (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - runner: windows-latest
+            arch: x64
+          - runner: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+      # No cache: these tarballs are release assets (cache poisoning).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci
+      - name: Set the package versions
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/set-versions.ps1 -Version '${{ needs.version.outputs.version }}'
+      - run: npm run build:native
+      - name: Pack
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          npm pack ./src/noda-js-win32-${{ matrix.arch }} --pack-destination artifacts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-${{ matrix.arch }}
+          path: artifacts/noda-js-win32-*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
   draft:
+    needs: [version, native]
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,7 +95,7 @@ jobs:
       # could have written (cache poisoning).
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
       # The pinned SDK, for tools/NodaJs.Package (npm run build:module's archives).
       - uses: actions/setup-dotnet@v6
         with:
@@ -44,13 +103,8 @@ jobs:
       - run: npm ci
 
       # Each step's logic is a script in scripts/, so it can be run and checked locally.
-      - name: Next version
-        id: version
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/next-version.ps1
-      - name: HEAD isn't already released as another version
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/check-head-tag.ps1 -Version '${{ steps.version.outputs.version }}'
       - name: Set the package versions
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/set-versions.ps1 -Version '${{ steps.version.outputs.version }}'
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/set-versions.ps1 -Version '${{ needs.version.outputs.version }}'
 
       - run: npm run build
       - run: npm run check:package
@@ -59,12 +113,18 @@ jobs:
       - run: npm run build:module
       - name: Pack
         run: npm pack --workspaces --pack-destination artifacts
+      # The native addon packages, from the native jobs.
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-*
+          path: artifacts
+          merge-multiple: true
 
       - name: Replace an earlier draft and leftover tag for this version
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/delete-draft-release.ps1 -Tag 'v${{ steps.version.outputs.version }}'
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/delete-draft-release.ps1 -Tag 'v${{ needs.version.outputs.version }}'
 
       - name: Create the draft release
         run: |
-          tag='v${{ steps.version.outputs.version }}'
+          tag='v${{ needs.version.outputs.version }}'
           gh release create "$tag" artifacts/*.tgz artifacts/noda-js-module-*.zip artifacts/noda-js-module-*.tar.gz \
             --draft --target "$GITHUB_SHA" --title "$tag" --generate-notes

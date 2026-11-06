@@ -10,6 +10,8 @@ $PSNativeCommandUseErrorActionPreference = $true
 Set-StrictMode -Version Latest
 
 $repo = Split-Path -Parent $PSScriptRoot
+# The Windows native addon packages (scripts/build-native.ps1): optional dependencies of noda-js in releases.
+$NativePackages = 'noda-js-win32-x64', 'noda-js-win32-arm64'
 
 # Sets a step output (steps.<id>.outputs.<name>) when running in GitHub Actions; prints it either way.
 function Set-ActionOutput([string] $Name, [string] $Value) {

@@ -9,6 +9,7 @@
 | `api/` | NodaTime's public API by reflection (generated) and a test that noda-js matches its shape: properties are getters, methods are methods. Deliberate differences: `api/differences.ts`. |
 | `golden/` | **Generated.** NodaTime's own formatting/parsing results per culture, .NET's culture-aware comparisons, NodaTime.Serialization.SystemTextJson's JSON for one value of each type in every calendar system (`json/`, read back by `json.test.ts`), and every year of every calendar system: leap years, year and month lengths and starts (`calendars/`, checked by `calendars.test.ts`, in place of NodaTime's day-by-day comparisons with the BCL's calendars). |
 | `tzdb-compiler/` | `noda-js/tzdb/compiler`: compiling `fixtures/tzdb/tzdata<version>.tar.gz` gives the bundled NZD byte for byte (with the host's `DecompressionStream`, with noda-js's own inflate, and from a plain `.tar`); the inflate and tar readers. |
+| `system/` | `noda-js/system`: unit tests over a fake Windows registry (`helpers/FakeWindowsTimeZoneApi.ts`), the same code as with FFI; `environment.test.ts`, which starts real Node processes: with different `TZ` values, and on Windows with each backend (the native addon package installed next to the probe or not, node:ffi on or off with `--no-experimental-ffi`), checking which backend is used and that the addon and node:ffi give identical results (the addon is built by `npm run build:native`; in CI a missing build fails, locally those cases are skipped); and `WindowsComparison.test.ts`, which compares every Windows zone with NodaTime's `BclDateTimeZoneSource` on .NET exactly. That needs Windows and `test-results/system-zones.json`, written by `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/export-system-zones.ps1`; without them it's skipped. |
 | `clock-isolation.test.ts` | Only `SystemClock` may read the real time, so everything else is testable with `FakeClock`. |
 | `fixtures/` | Binary test resources, imported with Vite's `?inline` (a `data:` URL) so they load the same way everywhere. `fixtures/tzdb/tzdata<version>.tar.gz` is the IANA tzdata release the bundled NZD was compiled from (written by `tools/NodaJs.Tools (data tzdb)`). |
 | `vitest/` | `npm run test:ci`'s JUnit reporter (suites named per project) and coverage provider (v8, Node only). |
@@ -24,7 +25,11 @@ Two more environments run from the `node` project: `no-host-apis.test.ts` reload
 `navigator`, `TextDecoder`, `atob`, `Uint8Array.fromBase64` and `performance` removed, and `module/quickjs.test.ts`
 builds the single-file module (`noda-js.js`, as released) and runs checks in [QuickJS](https://bellard.org/quickjs/),
 an embedded engine without any of those APIs (compiled to WebAssembly, via quickjs-emscripten). Both run in every
-`npm test` and `npm run test:ci`.
+`npm test` and `npm run test:ci`. `module/hermes.test.ts` does the same in [Hermes](https://github.com/facebook/hermes),
+React Native's engine on Android and iOS (no `Intl` either): the pinned Hermes VM is installed by
+`pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/install-hermes.ps1` (SHA-256 checked, into
+`node_modules/.cache/hermes`); without it the test is skipped locally and fails in CI. Hermes 0.13 lacks ES2015 classes
+and block scoping, so the test lowers them with Babel, as React Native's Babel preset does.
 
 | Command | Runs |
 |---|---|
@@ -36,7 +41,28 @@ an embedded engine without any of those APIs (compiled to WebAssembly, via quick
 
 The browsers are Playwright's builds: install them once with `npx playwright install chromium firefox webkit` (on Linux,
 add `--with-deps` for their system packages). Tests must not import `node:*` modules unless they're Node-only (add them to
-`nodeOnly` in `vitest.config.ts`).
+`nodeOnly` in `vitest.config.ts`). More browsers are opt-in through `NODA_TEST_BROWSERS` (comma-separated): `edge`
+(Playwright's branded Microsoft Edge), `safari` (desktop Safari through WebdriverIO and safaridriver, macOS),
+`ios-safari` (Mobile Safari in the iOS Simulator, `NODA_TEST_IOS_UDID`) and `android-chrome` (Chrome on an Android
+emulator through Appium, `scripts/test-android.sh`).
+
+### CI
+
+`.github/workflows/ci.yml` runs the suite on every push, as one job per place, each writing a Vitest blob report
+labelled with where it ran (`scripts/test-blob.ps1`):
+
+| Where | Projects |
+|---|---|
+| Linux, Windows, macOS | `node` (with coverage, QuickJS and Hermes), `chromium`, `firefox`, `webkit` |
+| Windows (x64 and ARM64) | `node` also builds the native addon (`npm run build:native`) and exports .NET's time zones (`scripts/export-system-zones.ps1`), for `test/system/` |
+| Windows | `edge` |
+| macOS | `safari`, `ios-safari` (iOS Simulator) |
+| Linux | `android-chrome` (Android emulator) |
+
+The `report` job then merges every blob (`scripts/merge-test-reports.ps1`, `vitest --merge-reports --coverage`) into one
+JUnit report, whose suites are named `"<file> [<project>, <where>]"`, and one coverage report (paths rebased onto the
+merging checkout), and publishes both. The `checks` job runs typecheck, build, `check:package` (ESLint, publint,
+arethetypeswrong, the package consumer), `check:reproducible` and `build:module`.
 
 ## Porting a NodaTime test class
 

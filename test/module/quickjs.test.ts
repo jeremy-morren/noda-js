@@ -42,7 +42,7 @@ check("period", () => N.Period.Between(new N.LocalDate(2024, 1, 31), new N.Local
 check("clock", () => N.SystemClock.Instance.GetCurrentInstant().ToUnixTimeMilliseconds() > 1700000000000);
 check("windows", () => new N.WindowsIdDateTimeZoneProvider(N.tzdb).Get("AUS Eastern Standard Time").Id);
 check("currentCulture", () => N.NodaCultureInfo.CurrentCulture.Name);
-check("browser", () => N.browser.Ids.length);
+check("system", () => N.SystemDateTimeZoneProvider.Ids.length);
 check("compiler", () => [typeof N.CompileTzdb, typeof N.CompileTzdbToNzd, typeof N.CompileTzdbSync, typeof N.CompileTzdbToNzdSync].join(","));
 globalThis.__checks = JSON.stringify(checks);
 `;
@@ -126,8 +126,8 @@ describe("noda-js.js in QuickJS", () => {
     expect(value("compiler")).toBe("function,function,function,function");
   });
 
-  it("fails clearly where it needs the host: CurrentCulture and noda-js/browser", () => {
+  it("fails clearly where it needs the host: CurrentCulture and noda-js/system", () => {
     expect(error("currentCulture")).toMatch(/^InvalidOperationException: The host reports no languages/);
-    expect(error("browser")).toMatch(/^InvalidOperationException: noda-js\/browser needs the host's Intl/);
+    expect(error("system")).toMatch(/^InvalidOperationException: noda-js\/system needs the host's Intl/);
   });
 });

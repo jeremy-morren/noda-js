@@ -25,11 +25,11 @@ jobs:
           global-json-file: tools/global.json
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
           
       - run: npm ci
-      - run: pwsh -NoProfile -ExecutionPolicy Bypass -File tools/generate.ps1
+      - run: npm run generate
       - run: npm run typecheck
       - run: npm test
       - uses: peter-evans/create-pull-request@v8

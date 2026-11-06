@@ -27,8 +27,8 @@
       "noda-js/tzdb/compiler": [
         "../src/noda-js/entries/tzdb-compiler.ts"
       ],
-      "noda-js/browser": [
-        "../src/noda-js/entries/browser.ts"
+      "noda-js/system": [
+        "../src/noda-js/entries/system.ts"
       ],
       "noda-js/testing": [
         "../src/noda-js/entries/testing.ts"

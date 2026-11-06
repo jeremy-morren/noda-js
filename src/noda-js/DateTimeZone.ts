@@ -61,8 +61,8 @@ let fixedZoneCache: DateTimeZone[] | undefined;
  * zoneinfo database is widely used outside Windows, and has more historical data than the Windows-provided
  * information, but if you need to interoperate with other Windows systems by specifying time zone IDs, you may
  * wish to stick to the Windows time zones.
- * (noda-js: the tz database is available from the `noda-js/tzdb` entry points, and the browser's own
- * time zones from `noda-js/browser`.)
+ * (noda-js: the tz database is available from the `noda-js/tzdb` entry points, and the host system's own
+ * time zones from `noda-js/system`.)
  *
  * To obtain a {@link DateTimeZone} for a given timezone ID, use one of the methods on
  * {@link IDateTimeZoneProvider}. The UTC timezone is also available via the {@link DateTimeZone.Utc} property on this class.

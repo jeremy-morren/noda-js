@@ -11,8 +11,14 @@ NodaTime.Test.TypeInitializationTest   # .NET type-initialization order
 NodaTime.Test.ExceptionConstructorTests # .NET exception constructors
 
 # Data depends on the host (time zones from the OS, the current time)
-NodaTime.Test.TimeZones.BclDateTimeZoneTest*        # host TimeZoneInfo data
-NodaTime.Test.TimeZones.BclDateTimeZoneSourceTest   # host TimeZoneInfo data
+# BclDateTimeZone(Source)Test (noda-js/system's SystemDateTimeZone(Source)): the cases of these are the host's
+# TimeZoneInfo zones. test/system/ compares every zone of the host with NodaTime's BclDateTimeZone instead.
+NodaTime.Test.TimeZones.BclDateTimeZoneTest.AreWindowsStyleRules       # host TimeZoneInfo data (test/system/)
+NodaTime.Test.TimeZones.BclDateTimeZoneTest.AllZoneTransitions         # host TimeZoneInfo data (test/system/)
+NodaTime.Test.TimeZones.BclDateTimeZoneTest.DisplayName                # host TimeZoneInfo data (test/system/)
+NodaTime.Test.TimeZones.BclDateTimeZoneTest.AllZonesEveryWeek          # host TimeZoneInfo data (test/system/)
+NodaTime.Test.TimeZones.BclDateTimeZoneTest.AllZonesStartAndEndOfTime  # host TimeZoneInfo data (test/system/)
+NodaTime.Test.TimeZones.BclDateTimeZoneTest+LinuxAdjustmentRules       # .NET Core on Unix's adjustment rules (not ported: noda-js reads Windows' data)
 NodaTime.Test.TimeZones.TzdbDateTimeZoneSourceTest.GuessZoneIdByTransitionsUncached # cases are the host's TimeZoneInfo zones
 NodaTime.Test.SystemClockTest                        # current time
 NodaTime.TzdbCompiler.Test.Tzdb.NameIdMappingSupportTest # compares with the host's TimeZoneInfo standard names

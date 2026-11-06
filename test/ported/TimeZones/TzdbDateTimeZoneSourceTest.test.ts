@@ -11,7 +11,7 @@
 // TzdbStreamData.NewBuilder, TzdbDateTimeZoneSource.NewSource, TzdbStreamField.NewIdData and
 // WindowsZones.NewVersionTzdbVersionWindowsVersionMapZones; TzdbStreamData.Builder is TzdbStreamDataBuilder.
 // Aliases is a ReadonlyMap rather than an ILookup, so a canonical ID with no aliases has no entry (rather than an
-// empty group). MapTimeZoneInfoId takes the zone's ID rather than a TimeZoneInfo.
+// empty group). MapTimeZoneInfoId takes an IHostTimeZone (an ID and UTC offsets) rather than a TimeZoneInfo.
 
 /// <reference types="vite/client" />
 import { expect } from "vitest";
@@ -24,6 +24,7 @@ import {
   LocalDateTime,
   MapZone,
   NodaConstants,
+  Offset,
   TzdbDateTimeZoneSource,
   TzdbStreamData,
   TzdbStreamDataBuilder,
@@ -35,9 +36,9 @@ import {
   WindowsZones,
   ZonedDateTime,
 } from "../../../src/noda-js/internal.ts";
+import type { IHostTimeZone } from "../../../src/noda-js/TimeZones/HostTimeZone.ts";
 import { tzdb, tzdbSource } from "../../../src/noda-js/entries/tzdb-bundled.ts";
 import { assertNodaEqual, assertThrows } from "../../helpers/assertions.ts";
-import { UnsupportedValue } from "../../helpers/decode.ts";
 import { port } from "../../helpers/scenarios.ts";
 import { TestHelper } from "../../helpers/TestHelper.ts";
 import { fixture } from "../../scenarios/TimeZones/TzdbDateTimeZoneSourceTest.generated.ts";
@@ -284,26 +285,23 @@ port(
 
     LocalZoneIsNull() {
       // C#: replaces TimeZoneInfo.Local with null, then calls GetSystemDefaultId(), which maps TimeZoneInfo.Local
-      // with MapTimeZoneInfoId. noda-js reads the system zone's ID from Intl, which can't be replaced, so this checks
-      // the mapping of a null system zone directly.
+      // with MapTimeZoneInfoId. noda-js reads the system zone from TZ, Intl and Date, which can't be replaced, so this
+      // checks the mapping of a null system zone directly.
       // If we have no system time zone, we have no ID to map it to.
       expect(tzdbSource.MapTimeZoneInfoId(null)).toBeNull();
     },
 
-    MapTimeZoneInfoId(timeZoneInfoId: string, _standardUtc: number, expectedId: string) {
-      // C#: TimeZoneInfo.CreateCustomTimeZone(timeZoneInfoId, TimeSpan.FromHours(standardUtc), ...); noda-js maps the
-      // zone's ID, and doesn't port the final fallback of guessing the zone by its transitions.
+    MapTimeZoneInfoId(timeZoneInfoId: string, standardUtc: number, expectedId: string) {
+      // C#: TimeZoneInfo.CreateCustomTimeZone(timeZoneInfoId, TimeSpan.FromHours(standardUtc), ...): a fixed zone.
+      const zoneInfo: IHostTimeZone = { Id: timeZoneInfoId, FromEnvironment: false, GetUtcOffset: () => Offset.FromHours(standardUtc) };
       const source = tzdbSource;
-      if (!source.WindowsMapping.PrimaryMapping.has(timeZoneInfoId) && !source.CanonicalIdMap.has(timeZoneInfoId)) {
-        throw new UnsupportedValue("Guessing a zone by its transitions (GuessZoneIdByTransitions) needs a TimeZoneInfo, so isn't ported");
-      }
-      const mappedId = source.MapTimeZoneInfoId(timeZoneInfoId);
+      const mappedId = source.MapTimeZoneInfoId(zoneInfo);
       expect(mappedId).toBe(expectedId);
 
       // Do it again, and expect to get the same result again.
       // In the case of the "Lilo and Stitch" zone, this means hitting the cache rather than guessing
       // via transitions again.
-      expect(source.MapTimeZoneInfoId(timeZoneInfoId)).toBe(mappedId);
+      expect(source.MapTimeZoneInfoId(zoneInfo)).toBe(mappedId);
     },
 
     CanonicalIdMapValueIsNotAKey() {

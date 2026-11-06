@@ -35,6 +35,7 @@ const BaseCodesByCode = {
   InvalidDataException: ["SystemException"],
   HttpRequestException: [],
   TimeZoneNotFoundException: [],
+  InvalidTimeZoneException: [],
 
   AmbiguousTimeException: ["ArgumentOutOfRangeException", "ArgumentException", "SystemException"],
   SkippedTimeException: ["ArgumentOutOfRangeException", "ArgumentException", "SystemException"],

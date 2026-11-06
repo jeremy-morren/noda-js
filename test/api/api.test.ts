@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import * as noda from "../../src/noda-js/internal.ts";
 import { NodaTimeApi } from "./nodatime-api.generated.ts";
-import { notPorted, renamed } from "./differences.ts";
+import { notPorted, renamed, renamedTypes } from "./differences.ts";
 import type { ApiMember, ApiType } from "./types.ts";
 
 // How C# operators appear in noda-js (docs/porting-conventions.md).
@@ -36,9 +36,9 @@ function findDescriptor(target: object, name: string | symbol): PropertyDescript
   return undefined;
 }
 
-/** The noda-js export name of a NodaTime type: the C# name (exceptions included; docs/porting-conventions.md). */
+/** The noda-js export name of a NodaTime type: the C# name (exceptions included; docs/porting-conventions.md), unless renamed. */
 function tsTypeName(type: ApiType): string {
-  return type.name;
+  return renamedTypes[type.name] ?? type.name;
 }
 
 /** Extension classes (static classes of C# extension methods) are exported as plain functions. */
@@ -123,7 +123,8 @@ for (const type of NodaTimeApi) {
     });
     for (const member of type.members) {
       const key = `${type.name}.${member.csName}`;
-      const reason = member.bclInterop ? "BCL interop (not ported: docs/api-differences.md)" : notPorted[key];
+      // Renamed types (noda-js/system's) are ported with their BCL interop (noda-js's port of TimeZoneInfo).
+      const reason = member.bclInterop && renamedTypes[type.name] === undefined ? "BCL interop (not ported: docs/api-differences.md)" : notPorted[key];
       const label = `${member.kind} ${member.isStatic ? "static " : ""}${member.csName}`;
       if (reason !== undefined) {
         it.skip(`${label} — not ported: ${reason}`, () => {});

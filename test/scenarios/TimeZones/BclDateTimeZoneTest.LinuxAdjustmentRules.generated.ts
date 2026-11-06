@@ -8,20 +8,20 @@ import type { ScenarioFixture } from "../types.ts";
 export const fixture: ScenarioFixture = {
   name: "NodaTime.Test.TimeZones.BclDateTimeZoneTest+LinuxAdjustmentRules",
   source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.LinuxAdjustmentRules.cs",
-  excluded: "host TimeZoneInfo data",
+  excluded: ".NET Core on Unix's adjustment rules (not ported: noda-js reads Windows' data)",
   tests: [
     {
       method: "SimpleMultiRulesNetCore31",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.LinuxAdjustmentRules.cs:24",
       parameters: ["LinuxAdjustmentMultiRuleData data"],
-      excluded: "host TimeZoneInfo data",
+      excluded: ".NET Core on Unix's adjustment rules (not ported: noda-js reads Windows' data)",
       cases: [],
     },
     {
       method: "SimpleMultiRulesNet6",
       source: "src/NodaTime.Test/TimeZones/BclDateTimeZoneTest.LinuxAdjustmentRules.cs:27",
       parameters: ["LinuxAdjustmentMultiRuleData data"],
-      excluded: "host TimeZoneInfo data",
+      excluded: ".NET Core on Unix's adjustment rules (not ported: noda-js reads Windows' data)",
       cases: [],
     },
   ],

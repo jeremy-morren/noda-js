@@ -9,8 +9,9 @@ namespace NodaJs.Tools.Cldr;
 /// The <c>cldr</c> command: the Windows (BCL) time zone ID mapping as TypeScript, from CLDR's windowsZones.xml
 /// (Windows ID ↔ IANA/tzdb ID), parsed by NodaTime's own CldrWindowsZonesParser →
 /// src/noda-js/Bcl/CldrWindowsZones.generated.ts. noda-js uses it to accept Windows zone IDs (e.g. in deserialized
-/// data) and map them to tzdb zones. Windows' own zone <em>rules</em> are deliberately not exported: they exist only
-/// in a Windows machine's registry, with no published, redistributable source.
+/// data) and map them to tzdb zones, and noda-js/system to map IANA IDs to Windows IDs. Windows' own zone <em>rules</em>
+/// are deliberately not exported: they exist only in a Windows machine's registry, with no published, redistributable
+/// source (noda-js/system reads them from the machine it runs on).
 /// </summary>
 internal static class CldrExport
 {

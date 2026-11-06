@@ -32,6 +32,7 @@ culture data is the same on every OS. Re-running is idempotent: unchanged files 
 | `data`      | `src/noda-js/**/*.generated.ts` enums (with doc comments), `src/noda-js/NodaConstants.generated.ts`, `src/noda-js/Text/TextErrorMessages.generated.ts`, `src/noda-js/Cultures/<name>.generated.ts` (cultures in `cultures.txt`), invariant culture + NodaTime `PatternResources`, `src/noda-js/TimeZones/TzdbBundledData.generated.ts` (and `test/fixtures/tzdb/tzdata<version>.tar.gz`), `test/api/nodatime-api.generated.ts`, `test/golden/**` | Reflection over NodaTime; .NET `CultureInfo`; NodaTime's `TzdbCompiler`; NodaTime itself formatting values |
 | `cldr`      | `src/noda-js/Bcl/CldrWindowsZones.generated.ts` | CLDR `windowsZones.xml` (latest release), parsed by NodaTime's `CldrWindowsZonesParser` |
 | `scenarios` | `test/scenarios/**` | Every NUnit test case in `NodaTime.Test` and `NodaTime.TzdbCompiler.Test`, enumerated by NUnit itself |
+| `system-zones` | `test-results/system-zones.json` (not committed: it's the machine's) | NodaTime's `BclDateTimeZoneSource` on this machine: IDs, system default, every zone's names, `TimeZoneInfo` rules and zone intervals (1800-2100), the local zone, and .NET's IANA → Windows ID conversions. Run by `scripts/export-system-zones.ps1`; `test/system/WindowsComparison.test.ts` compares noda-js/system with it |
 
 ## tzdb
 
@@ -70,5 +71,6 @@ without cases.
 
 The `cldr` command exports only CLDR's Windows ↔ tzdb ID mapping (Unicode License). Windows' own
 zone rules exist only in a Windows machine's registry, with no published, redistributable source, so
-noda-js supports Windows zone IDs by mapping them to tzdb zones (`noda-js/windows`) rather than
-porting `BclDateTimeZone`.
+nothing exports them: `noda-js/system` reads them from the machine it runs on (as .NET's `TimeZoneInfo` does), and
+`noda-js/windows` maps Windows zone IDs to tzdb zones elsewhere. The `system-zones` command exports what NodaTime sees
+on the machine it runs on, only to test against (see [docs/Timezones.md](../docs/Timezones.md)).

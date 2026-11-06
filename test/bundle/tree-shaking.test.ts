@@ -1,5 +1,5 @@
 // Tree-shaking checks: bundle small apps with esbuild (production settings) and check
-// that optional data (tzdb, browser zones, cultures) is only included when it's imported.
+// that optional data (tzdb, the system provider, cultures) is only included when it's imported.
 
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
@@ -41,6 +41,11 @@ const calendarFiles: Record<string, string[]> = {
   badi: ["BadiYearMonthDayCalculator.ts", "BadiYearMonthDayCalculatorData.generated.ts"],
 };
 
+/** noda-js/system's own files in a bundle (by its inputs). */
+function systemFiles(inputs: string[]): string[] {
+  return inputs.filter(input => input.startsWith("src/noda-js/System/") || /^src\/noda-js\/TimeZones\/(System|TimeZoneInfoInterceptor)/.test(input));
+}
+
 /** Which entry points' calendar files are in a bundle (by its inputs). */
 function bundledCalendars(inputs: string[]): string[] {
   return Object.keys(calendarFiles).filter(name =>
@@ -48,7 +53,7 @@ function bundledCalendars(inputs: string[]): string[] {
 }
 
 describe("tree shaking", () => {
-  it("core only: no tzdb data, browser source or cultures", async () => {
+  it("core only: no tzdb data, system provider or cultures", async () => {
     const code = await bundle(`
       import { Instant, LocalDate, DateTimeZone, Offset, LocalDatePattern } from "./src/noda-js/index.ts";
       const zone = DateTimeZone.ForOffset(Offset.FromHours(10));
@@ -61,13 +66,36 @@ describe("tree shaking", () => {
     expect(code).not.toContain("AUS Eastern Standard Time");
   }, 60000);
 
-  it("browser only: no tzdb data", async () => {
-    const code = await bundle(`
-      import { browser } from "./src/noda-js/entries/browser.ts";
-      console.log(browser.GetZoneOrNull("Europe/London"));
+  it("system only: no tzdb data; the system provider, the Windows (FFI) code and Intl probing", async () => {
+    const { code, inputs } = await bundleWithInputs(`
+      import { SystemDateTimeZoneProvider } from "./src/noda-js/entries/system.ts";
+      console.log(SystemDateTimeZoneProvider.GetZoneOrNull("Europe/London"));
     `);
     expect(code).not.toContain(nzdMarker);
     expect(code).toContain("supportedValuesOf");
+    expect(code).toContain("node:ffi");
+    expect(systemFiles(inputs)).toEqual(expect.arrayContaining([
+      "src/noda-js/TimeZones/SystemDateTimeZone.ts",
+      "src/noda-js/System/TimeZoneInfo.Win32.ts",
+      "src/noda-js/System/Windows/FfiWindowsTimeZoneApi.ts",
+      "src/noda-js/System/IntlTimeZone.ts",
+    ]));
+  }, 60000);
+
+  it("core and tzdb: no system provider, TimeZoneInfo port or FFI code", async () => {
+    for (const source of [`
+      import { Instant, DateTimeZone, Offset } from "./src/noda-js/index.ts";
+      console.log(Instant.FromUtc(2024, 1, 1, 0, 0).InZone(DateTimeZone.ForOffset(Offset.FromHours(10))));
+    `, `
+      import { tzdb } from "./src/noda-js/entries/tzdb-bundled.ts";
+      console.log(tzdb.GetSystemDefault(), tzdb.Get("Europe/London"));
+    `]) {
+      const { code, inputs } = await bundleWithInputs(source);
+      expect(systemFiles(inputs)).toEqual([]);
+      expect(code).not.toContain("node:ffi");
+      expect(code).not.toContain("GetDynamicTimeZoneInformation");
+      expect(code).not.toContain("supportedValuesOf");
+    }
   }, 60000);
 
   it("tzdb runtime (no bundled data): reader present, no NZD", async () => {
